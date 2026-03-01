@@ -257,3 +257,116 @@ JOIN Payment p
 GROUP BY i.InstitutionID, i.Name, p.PaymentType
 ORDER BY i.InstitutionID, p.PaymentType;
 
+-- part 5
+--appropriate reports
+-- Registered instituions report
+SELECT i.InstitutionID,
+       i.Name AS InstitutionName,
+       i.Type,
+       i.Address,
+       i.Status,
+       i.RegistrationDate,
+       cp.FullName AS ContactPerson,
+       cp.Phone,
+       cp.Email
+FROM Institution i
+JOIN ContactPerson cp
+       ON i.ContactID = cp.ContactID
+ORDER BY i.InstitutionID;
+
+-- Defaulters report - institutions that have not paid
+SELECT i.InstitutionID,
+       i.Name AS InstitutionName,
+       i.Type,
+       i.Address,
+       i.Status
+FROM Institution i
+LEFT JOIN Payment p
+       ON i.InstitutionID = p.InstitutionID
+       AND p.PaymentType = 'Monthly Fee'
+       AND MONTH(p.PaymentDate) = MONTH(CURDATE())
+       AND YEAR(p.PaymentDate) = YEAR(CURDATE())
+WHERE p.PaymentID IS NULL;
+
+-- Disconnection report - institutions currently disconnected on the service
+SELECT i.InstitutionID,
+       i.Name AS InstitutionName,
+       i.Type,
+       i.Status,
+       d.DisconnectionDate,
+       d.Reason
+FROM Institution i
+JOIN Disconnection d
+       ON i.InstitutionID = d.InstitutionID
+WHERE d.ReconnectionDate IS NULL;
+
+-- infrastructure details report
+SELECT i.InstitutionID,
+       i.Name AS InstitutionName,
+       ip.NumberOfPCs,
+       ip.PCUnitCost,
+       (ip.NumberOfPCs * ip.PCUnitCost) AS TotalPCCost,
+       lp.MinNodes AS LANMinNodes,
+       lp.MaxNodes AS LANMaxNodes,
+       lp.Cost AS LANCost
+FROM Institution i
+JOIN InfrastructurePurchase ip
+       ON i.InstitutionID = ip.InstitutionID
+JOIN LANPackage lp
+       ON ip.LANPackageID = lp.LANPackageID;
+
+-- total installation cost report per institution
+SELECT i.InstitutionID,
+       i.Name AS InstitutionName,
+       SUM(p.Amount) AS TotalInstallationCost
+FROM Institution i
+JOIN Payment p
+       ON i.InstitutionID = p.InstitutionID
+WHERE p.PaymentType = 'Installation Fee'
+GROUP BY i.InstitutionID, i.Name;i
+
+-- PC and LAN cost report - total costs for computers and LAN per institution. 
+SELECT i.InstitutionID,
+       i.Name AS InstitutionName,
+       SUM(ip.NumberOfPCs * ip.PCUnitCost) AS TotalPCCost,
+       SUM(lp.Cost) AS TotalLANCost,
+       SUM(ip.NumberOfPCs * ip.PCUnitCost + lp.Cost) AS TotalInfraCost
+FROM Institution i
+JOIN InfrastructurePurchase ip
+       ON i.InstitutionID = ip.InstitutionID
+JOIN LANPackage lp
+       ON ip.LANPackageID = lp.LANPackageID
+GROUP BY i.InstitutionID, i.Name;
+
+-- Upgared internet service report -monthly charges for upgraded internet services.
+SELECT i.InstitutionID,
+       i.Name AS InstitutionName,
+       SUM(s.MonthlyCost - IFNULL(u.DiscountApplied,0)) AS TotalUpgradedMonthlyCharge
+FROM Upgrade u
+JOIN Institution i
+       ON u.InstitutionID = i.InstitutionID
+JOIN Service s
+       ON u.NewServiceID = s.ServiceID
+GROUP BY i.InstitutionID, i.Name;
+
+-- Total Monthly Charges, Overdue Fines & Reconnection Fees by Institution Type -Aggregates all charges, fines, and reconnections per institution type.
+SELECT i.Type AS InstitutionCategory,
+       SUM(CASE WHEN p.PaymentType = 'Monthly Fee' THEN p.Amount ELSE 0 END) AS TotalMonthlyPayments,
+       SUM(CASE WHEN p.PaymentType = 'Overdue Fine' THEN p.Amount ELSE 0 END) AS TotalOverdueFines,
+       SUM(CASE WHEN p.PaymentType = 'Reconnection Fee' THEN p.Amount ELSE 0 END) AS TotalReconnectionFees,
+       SUM(p.Amount) AS GrandTotal
+FROM Institution i
+JOIN Payment p
+       ON i.InstitutionID = p.InstitutionID
+GROUP BY i.Type;
+
+-- Aggregate Amount per Service Sorted by Institution
+SELECT i.InstitutionID,
+       i.Name AS InstitutionName,
+       p.PaymentType AS ServiceType,
+       SUM(p.Amount) AS TotalAmount
+FROM Institution i
+JOIN Payment p
+       ON i.InstitutionID = p.InstitutionID
+GROUP BY i.InstitutionID, i.Name, p.PaymentType
+ORDER BY i.InstitutionID, p.PaymentType;
